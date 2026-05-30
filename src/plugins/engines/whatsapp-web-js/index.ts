@@ -11,6 +11,7 @@ export interface WhatsAppWebJsConfig {
   sessionDataPath?: string;
   headless?: boolean;
   puppeteerArgs?: string[];
+  executablePath?: string;
 }
 
 export class WhatsAppWebJsPlugin implements IEnginePlugin {
@@ -35,12 +36,22 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
 
   createEngine(config: Record<string, unknown>): IWhatsAppEngine {
     const sessionId = config.sessionId as string;
-    const sessionDataPath = (this.context?.config.sessionDataPath as string) ?? './data/sessions';
-    const headless = (this.context?.config.headless as boolean) ?? true;
-    const puppeteerArgs = (this.context?.config.puppeteerArgs as string[]) ?? [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-    ];
+
+    const sessionDataPath =
+      (this.context?.config.sessionDataPath as string) ?? process.env.SESSION_DATA_PATH ?? './data/sessions';
+
+    const headless =
+      (this.context?.config.headless !== undefined ? (this.context.config.headless as boolean) : undefined) ??
+      process.env.PUPPETEER_HEADLESS !== 'false';
+
+    const puppeteerArgs = (this.context?.config.puppeteerArgs as string[]) ??
+      (process.env.PUPPETEER_ARGS ? process.env.PUPPETEER_ARGS.split(',') : undefined) ?? [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ];
+
+    const executablePath =
+      (this.context?.config.executablePath as string) || process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
 
     const proxyUrl = config.proxyUrl as string | undefined;
     const proxyType = config.proxyType as 'http' | 'https' | 'socks4' | 'socks5' | undefined;
@@ -51,6 +62,7 @@ export class WhatsAppWebJsPlugin implements IEnginePlugin {
       puppeteer: {
         headless,
         args: puppeteerArgs,
+        executablePath,
       },
       proxy: proxyUrl
         ? {

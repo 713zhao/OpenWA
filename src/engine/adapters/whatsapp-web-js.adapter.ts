@@ -42,6 +42,7 @@ export interface WhatsAppWebJsConfig {
   puppeteer?: {
     headless?: boolean;
     args?: string[];
+    executablePath?: string;
   };
   // Phase 3: Proxy per session
   proxy?: {
@@ -96,6 +97,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         puppeteer: {
           headless: this.config.puppeteer?.headless ?? true,
           args: puppeteerArgs,
+          executablePath: this.config.puppeteer?.executablePath || undefined,
         },
       });
 
@@ -116,6 +118,17 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         this.qrCode = await qrcode.toDataURL(qr);
         this.setStatus(EngineStatus.QR_READY);
         this.callbacks.onQRCode?.(this.qrCode);
+
+        // Render and log ASCII QR code to terminal for SSH/CLI environments
+        qrcode.toString(qr, { type: 'terminal', small: true }, (err, url) => {
+          if (!err) {
+            console.log('\n========================================');
+            console.log(`Scan QR Code for Session: ${this.config.sessionId}`);
+            console.log('========================================');
+            console.log(url);
+            console.log('========================================\n');
+          }
+        });
       } catch (error) {
         this.logger.error('Error generating QR code', String(error));
       }

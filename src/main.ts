@@ -1,12 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ShutdownService } from './common/services/shutdown.service';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Request, Response } from 'express';
 
 // Configuration loading order (later sources do NOT override earlier ones):
 //   1. Process env (Docker, shell, systemd) — highest priority
@@ -65,7 +67,7 @@ STORAGE_PATH=./data/media
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Enable shutdown hooks for graceful shutdown
   app.enableShutdownHooks();
@@ -83,25 +85,34 @@ async function bootstrap() {
         directives: {
           defaultSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:', 'https:'],
-          connectSrc: ["'self'"],
-          fontSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+          connectSrc: ["'self'", 'ws:', 'wss:'],
+          fontSrc: ["'self'", 'data:'],
           objectSrc: ["'none'"],
-          upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+          upgradeInsecureRequests: null,
         },
       },
-      hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true,
-      },
+      hsts: false,
       noSniff: true,
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-      // Disable for API usage
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
+
+  // Serve built dashboard static files at /
+  const dashboardDist = path.join(process.cwd(), 'dashboard', 'dist');
+  if (fs.existsSync(dashboardDist)) {
+    app.useStaticAssets(dashboardDist);
+    // SPA fallback: non-API routes serve index.html for client-side routing
+    app.use((req: Request, res: Response, next: () => void) => {
+      if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(dashboardDist, 'index.html'));
+      } else {
+        next();
+      }
+    });
+  }
 
   // CORS Configuration (Phase 3 Security Audit)
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
