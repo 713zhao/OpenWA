@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SessionService } from '../session/session.service';
-import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
+import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto, SendButtonsMessageDto, SendListMessageDto, SendPollMessageDto } from './dto';
 import { MediaInput } from '../../engine/interfaces/whatsapp-engine.interface';
 import { Message, MessageDirection, MessageStatus } from './entities/message.entity';
 import { HookManager } from '../../core/hooks';
@@ -332,6 +332,53 @@ export class MessageService {
       message.status = MessageStatus.FAILED;
       await this.messageRepository.save(message);
       throw error;
+    }
+  }
+
+  // ========== Interactive Messaging ==========
+
+  async sendPoll(sessionId: string, dto: SendPollMessageDto): Promise<MessageResponseDto> {
+    const engine = this.getEngine(sessionId);
+    try {
+      const result = await engine.sendPollMessage(dto.chatId, {
+        question: dto.question,
+        options: dto.options,
+        allowMultipleAnswers: dto.allowMultipleAnswers ?? false,
+      });
+      return { messageId: result.id, timestamp: result.timestamp };
+    } catch (error) {
+      throw new BadRequestException(String(error));
+    }
+  }
+
+  async sendButtons(sessionId: string, dto: SendButtonsMessageDto): Promise<MessageResponseDto> {
+    const engine = this.getEngine(sessionId);
+    try {
+      const result = await engine.sendButtonsMessage(dto.chatId, {
+        body: dto.body,
+        buttons: dto.buttons,
+        title: dto.title,
+        footer: dto.footer,
+      });
+      return { messageId: result.id, timestamp: result.timestamp };
+    } catch (error) {
+      throw new BadRequestException(String(error));
+    }
+  }
+
+  async sendList(sessionId: string, dto: SendListMessageDto): Promise<MessageResponseDto> {
+    const engine = this.getEngine(sessionId);
+    try {
+      const result = await engine.sendListMessage(dto.chatId, {
+        body: dto.body,
+        buttonText: dto.buttonText,
+        sections: dto.sections,
+        title: dto.title,
+        footer: dto.footer,
+      });
+      return { messageId: result.id, timestamp: result.timestamp };
+    } catch (error) {
+      throw new BadRequestException(String(error));
     }
   }
 

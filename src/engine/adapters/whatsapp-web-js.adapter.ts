@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia, Buttons, List, Poll } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
 import {
@@ -16,6 +16,9 @@ import {
   LocationInput,
   ContactCard,
   MessageReaction,
+  PollInput,
+  ButtonsInput,
+  ListInput,
   Label,
   Channel,
   ChannelMessage,
@@ -166,7 +169,29 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
           timestamp: msg.timestamp,
           fromMe: msg.fromMe,
           isGroup: msg.from.endsWith('@g.us'),
+          pushName: (msg as any)._data?.notifyName || undefined,
         };
+
+        // Resolve real phone number (msg.from may be a WhatsApp LID, not a phone number)
+        try {
+          const contact = await msg.getContact();
+          const rawData = (contact as any)._data || {};
+          // Prefer @c.us based ID (real phone number) over LID
+          const serverId: string = (contact as any).id?.server || '';
+          if (serverId === 'c.us') {
+            incomingMessage.senderPhone = (contact as any).id?.user || contact.number;
+          } else if (rawData.phoneNumber) {
+            incomingMessage.senderPhone = String(rawData.phoneNumber);
+          } else if (rawData.lid?.phoneNumber) {
+            incomingMessage.senderPhone = String(rawData.lid.phoneNumber);
+          } else {
+            // Fallback: log available fields so we can improve this later
+            this.logger.debug(`LID contact fields: ${JSON.stringify({ number: contact.number, server: serverId, dataKeys: Object.keys(rawData).join(',') })}`);
+            incomingMessage.senderPhone = contact.number;
+          }
+        } catch (error) {
+          this.logger.error('Error getting contact for senderPhone', String(error));
+        }
 
         // Handle media
         if (msg.hasMedia) {
@@ -451,6 +476,39 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       id: msg.id._serialized,
       timestamp: msg.timestamp,
     };
+  }
+
+  async sendPollMessage(chatId: string, input: PollInput): Promise<MessageResult> {
+    this.ensureReady();
+    try {
+      const poll = new Poll(input.question, input.options, { allowMultipleAnswers: input.allowMultipleAnswers ?? false, messageSecret: undefined });
+      const msg = await this.client!.sendMessage(chatId, poll);
+      return { id: msg.id._serialized, timestamp: msg.timestamp };
+    } catch (err: any) {
+      throw new Error(`Failed to send poll: ${String(err)}`);
+    }
+  }
+
+  async sendButtonsMessage(chatId: string, input: ButtonsInput): Promise<MessageResult> {
+    this.ensureReady();
+    try {
+      const btns = new Buttons(input.body, input.buttons, input.title, input.footer);
+      const msg = await this.client!.sendMessage(chatId, btns);
+      return { id: msg.id._serialized, timestamp: msg.timestamp };
+    } catch (err: any) {
+      throw new Error(`Failed to send buttons message: ${String(err)}`);
+    }
+  }
+
+  async sendListMessage(chatId: string, input: ListInput): Promise<MessageResult> {
+    this.ensureReady();
+    try {
+      const list = new List(input.body, input.buttonText, input.sections, input.title, input.footer);
+      const msg = await this.client!.sendMessage(chatId, list);
+      return { id: msg.id._serialized, timestamp: msg.timestamp };
+    } catch (err: any) {
+      throw new Error(`Failed to send list message: ${String(err)}`);
+    }
   }
 
   async replyToMessage(chatId: string, quotedMsgId: string, text: string): Promise<MessageResult> {

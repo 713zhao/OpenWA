@@ -32,6 +32,8 @@ export interface IncomingMessage {
   timestamp: number;
   fromMe: boolean;
   isGroup: boolean;
+  pushName?: string;
+  senderPhone?: string;
   media?: {
     mimetype: string;
     filename?: string;
@@ -194,6 +196,30 @@ export interface PaginatedProducts {
   };
 }
 
+export interface PollInput {
+  question: string;
+  options: string[];
+  allowMultipleAnswers?: boolean;
+}
+
+export interface ButtonsInput {
+  body: string;
+  buttons: Array<{ id?: string; body: string }>;
+  title?: string;
+  footer?: string;
+}
+
+export interface ListInput {
+  body: string;
+  buttonText: string;
+  sections: Array<{
+    title?: string;
+    rows: Array<{ id?: string; title: string; description?: string }>;
+  }>;
+  title?: string;
+  footer?: string;
+}
+
 export interface EngineEventCallbacks {
   onQRCode?: (qr: string) => void;
   onReady?: (phone: string, pushName: string) => void;
@@ -227,6 +253,11 @@ export interface IWhatsAppEngine {
   sendLocationMessage(chatId: string, location: LocationInput): Promise<MessageResult>;
   sendContactMessage(chatId: string, contact: ContactCard): Promise<MessageResult>;
   sendStickerMessage(chatId: string, media: MediaInput): Promise<MessageResult>;
+
+  // Interactive
+  sendPollMessage(chatId: string, input: PollInput): Promise<MessageResult>;
+  sendButtonsMessage(chatId: string, input: ButtonsInput): Promise<MessageResult>;
+  sendListMessage(chatId: string, input: ListInput): Promise<MessageResult>;
 
   // Reply & Forward
   replyToMessage(chatId: string, quotedMsgId: string, text: string): Promise<MessageResult>;
